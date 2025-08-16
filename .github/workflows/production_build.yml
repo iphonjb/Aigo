@@ -1,0 +1,109 @@
+﻿name: AI go Production Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: '사용할 AI 모델'
+        required: true
+        default: 'llama-3-8b-instruct.Q4_K_M'
+        type: choice
+        options:
+        - llama-3-8b-instruct.Q4_K_M
+        - mixtral-8x7b-instruct.Q4_K_M
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      PROJECT_NAME: AI_go
+      IPA_NAME: AI_go_${{ github.run_number }}.ipa
+      
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Xcode
+      uses: maxim-lobanov/setup-xcode@v3
+      with:
+        xcode-version: '17.0'
+        
+    - name: Download AI Model
+      run: |
+        MODEL=${{ inputs.model }}
+        MODEL_URL=$(jq -r ".available_models.\"$MODEL\".url" Resources/AIConfig.json)
+        
+        echo "Downloading $MODEL from $MODEL_URL"
+        mkdir -p Models
+        curl -L $MODEL_URL -o Models/$MODEL.gguf
+        ls -lh Models/
+
+    - name: Install Dependencies
+      run: |
+        git clone https://github.com/ggerganov/llama.cpp
+        cd llama.cpp
+        make libllama.a -j8
+        mkdir -p ../Frameworks
+        cp libllama.a ../Frameworks/
+        cd ..
+        
+        cat > project.yml <<EOF
+        name: $PROJECT_NAME
+        options:
+          bundleIdPrefix: com.${{ github.repository_owner }}
+          deploymentTarget:
+            iOS: "16.0"
+        targets:
+          $PROJECT_NAME:
+            type: application
+            platform: iOS
+            sources: Sources
+            resources:
+              - Resources
+              - Models
+            dependencies:
+              - framework: Frameworks/libllama.a
+        EOF
+        
+        xcodegen generate
+
+    - name: Build IPA
+      run: |
+        xcodebuild build \
+          -project $PROJECT_NAME.xcodeproj \
+          -scheme $PROJECT_NAME \
+          -configuration Release \
+          -sdk iphoneos \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO \
+          ARCHS="arm64 arm64e" \
+          OTHER_CFLAGS="-O3 -flto=full" \
+          GCC_OPTIMIZATION_LEVEL="fast" \
+          | xcpretty
+
+        mkdir Payload
+        cp -r build/Release-iphoneos/$PROJECT_NAME.app Payload/
+        zip -qr $IPA_NAME Payload
+        rm -rf Payload
+
+    - name: Upload IPA
+      uses: actions/upload-artifact@v4
+      with:
+        name: AI_go_IPA
+        path: ${{ env.IPA_NAME }}
+        retention-days: 7
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ env.IPA_NAME }}
+        tag_name: prod-${{ github.run_number }}
+        body: |
+          AI go Production Build
+          - Model: ${{ inputs.model }}
+          - iOS: 16.0+
+          - Run ID: ${{ github.run_number }}
+          - Commit: ${{ github.sha }}
