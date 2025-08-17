@@ -31,8 +31,9 @@ jobs:
       with:
         xcode-version: '16.2.0'
         
-    - name: Install jq
-      run: brew install jq
+    - name: Install Dependencies
+      run: |
+        brew install cmake ninja
         
     - name: Download AI Model
       run: |
@@ -43,15 +44,20 @@ jobs:
         curl -L "$MODEL_URL" -o "Models/$MODEL.gguf"
         ls -lh Models/
 
-    - name: Install Dependencies
+    - name: Build llama.cpp
       run: |
         git clone https://github.com/ggerganov/llama.cpp
         cd llama.cpp
-        make libllama.a -j8
-        mkdir -p ../Frameworks
-        cp libllama.a ../Frameworks/
-        cd ..
-        
+        mkdir build
+        cd build
+        cmake -G Ninja .. -DLLAMA_METAL=ON
+        cmake --build . --config Release --target libllama
+        mkdir -p ../../Frameworks
+        cp libllama.a ../../Frameworks/
+        cd ../..
+
+    - name: Generate Xcode Project
+      run: |
         cat > project.yml <<EOF
         name: $PROJECT_NAME
         options:
