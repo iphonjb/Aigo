@@ -29,7 +29,7 @@ jobs:
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '17.0'
+        xcode-version: '16.2.0'
         
     - name: Download AI Model
       run: |
