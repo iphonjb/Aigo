@@ -55,10 +55,22 @@ jobs:
         cd llama.cpp
         mkdir build
         cd build
-        cmake -G Ninja .. -DGGML_METAL=ON
+        
+        # 정적 라이브러리 빌드 옵션 추가
+        cmake -G Ninja .. \
+          -DGGML_METAL=ON \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DLLAMA_STATIC=ON
+        
         cmake --build . --config Release --target llama
+        
         mkdir -p ../../Frameworks
-        cp libllama.a ../../Frameworks/
+        
+        # 올바른 경로에서 파일 복사
+        cp bin/libllama.a ../../Frameworks/
+        
+        # 파일 확인
+        ls -lh ../../Frameworks/
         cd ../..
 
     - name: Generate Xcode Project
