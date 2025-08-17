@@ -56,20 +56,18 @@ jobs:
         mkdir build
         cd build
         
-        # 정적 라이브러리 빌드 옵션 추가
+        # LLAMA_STATIC 옵션 제거
         cmake -G Ninja .. \
           -DGGML_METAL=ON \
-          -DBUILD_SHARED_LIBS=OFF \
-          -DLLAMA_STATIC=ON
+          -DBUILD_SHARED_LIBS=OFF
         
         cmake --build . --config Release --target llama
         
         mkdir -p ../../Frameworks
         
-        # 올바른 경로에서 파일 복사
-        cp bin/libllama.a ../../Frameworks/
+        # 올바른 경로로 복사 (src/libllama.a)
+        cp src/libllama.a ../../Frameworks/
         
-        # 파일 확인
         ls -lh ../../Frameworks/
         cd ../..
 
