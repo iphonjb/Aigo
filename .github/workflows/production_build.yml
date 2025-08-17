@@ -33,11 +33,16 @@ jobs:
         
     - name: Install Dependencies
       run: |
-        brew install cmake ninja
+        brew install cmake ninja jq
         
     - name: Download AI Model
       run: |
-        MODEL="${{ github.event.inputs.model }}"
+        if [ -n "${{ github.event.inputs.model }}" ]; then
+          MODEL="${{ github.event.inputs.model }}"
+        else
+          MODEL="llama-3-8b-instruct.Q4_K_M"
+        fi
+        
         MODEL_URL=$(jq -r ".available_models.\"$MODEL\".url" Resources/AIConfig.json)
         echo "Downloading $MODEL from $MODEL_URL"
         mkdir -p Models
@@ -50,8 +55,8 @@ jobs:
         cd llama.cpp
         mkdir build
         cd build
-        cmake -G Ninja .. -DLLAMA_METAL=ON
-        cmake --build . --config Release --target libllama
+        cmake -G Ninja .. -DGGML_METAL=ON
+        cmake --build . --config Release --target llama
         mkdir -p ../../Frameworks
         cp libllama.a ../../Frameworks/
         cd ../..
