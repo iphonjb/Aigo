@@ -1,5 +1,4 @@
 ﻿name: AI go Production Build
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,7 +12,6 @@ on:
           - mixtral-8x7b-instruct.Q4_K_M
   push:
     branches: [main]
-
 jobs:
   build:
     runs-on: macos-latest
@@ -21,20 +19,17 @@ jobs:
     env:
       PROJECT_NAME: AI_go
       IPA_NAME: AI_go_${{ github.run_number }}.ipa
-      
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
-      
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
         xcode-version: '16.2.0'
-        
     - name: Install Dependencies
-      run: |
+      run: |  # 수정된 부분
         brew install cmake ninja jq
-        
+        brew install xcodegen  # 필수 추가!
     - name: Download AI Model
       run: |
         if [ -n "${{ github.event.inputs.model }}" ]; then
@@ -42,37 +37,27 @@ jobs:
         else
           MODEL="llama-3-8b-instruct.Q4_K_M"
         fi
-        
         MODEL_URL=$(jq -r ".available_models.\"$MODEL\".url" Resources/AIConfig.json)
         echo "Downloading $MODEL from $MODEL_URL"
         mkdir -p Models
         curl -L "$MODEL_URL" -o "Models/$MODEL.gguf"
         ls -lh Models/
-
     - name: Build llama.cpp
       run: |
-        git clone https://github.com/ggerganov/llama.cpp
+        git clone --depth 1 https://github.com/ggerganov/llama.cpp
         cd llama.cpp
         mkdir build
         cd build
-        
-        # LLAMA_STATIC 옵션 제거
         cmake -G Ninja .. \
           -DGGML_METAL=ON \
           -DBUILD_SHARED_LIBS=OFF
-        
-        cmake --build . --config Release --target llama
-        
+        cmake --build . --config Release --target llama -j $(sysctl -n hw.logicalcpu)
         mkdir -p ../../Frameworks
-        
-        # 올바른 경로로 복사 (src/libllama.a)
         cp src/libllama.a ../../Frameworks/
-        
         ls -lh ../../Frameworks/
         cd ../..
-
     - name: Generate Xcode Project
-      run: |
+      run: |  # 이제 xcodegen이 정상 실행됨
         cat > project.yml <<EOF
         name: $PROJECT_NAME
         options:
@@ -90,9 +75,7 @@ jobs:
             dependencies:
               - framework: Frameworks/libllama.a
         EOF
-        
         xcodegen generate
-
     - name: Build IPA
       run: |
         xcodebuild build \
@@ -106,19 +89,16 @@ jobs:
           OTHER_CFLAGS="-O3 -flto=full" \
           GCC_OPTIMIZATION_LEVEL="fast" \
           | xcpretty
-
         mkdir Payload
         cp -r build/Release-iphoneos/$PROJECT_NAME.app Payload/
         zip -qr $IPA_NAME Payload
         rm -rf Payload
-
     - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
         name: AI_go_IPA
         path: ${{ env.IPA_NAME }}
         retention-days: 7
-        
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
